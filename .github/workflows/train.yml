@@ -1,0 +1,91 @@
+name: Train fruit classifier
+
+on:
+  push:
+    branches:
+      - github-actions
+    paths:
+      - "*.py"
+      - requirements.txt
+      - .github/workflows/train.yml
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+          python -m pip install -r requirements.txt
+
+      - name: Download and prepare dataset
+        env:
+          DATASET_URL: ${{ vars.FRUITS_360_ZIP_URL }}
+        run: |
+          if [ -z "$DATASET_URL" ]; then
+            echo "Set the FRUITS_360_ZIP_URL repository variable to a direct dataset ZIP download URL." >&2
+            exit 1
+          fi
+          curl --fail --location --retry 3 "$DATASET_URL" --output /tmp/fruits-360.zip
+          python - <<'PY'
+          import shutil
+          import zipfile
+          from pathlib import Path
+
+          archive_path = Path("/tmp/fruits-360.zip")
+          extract_dir = Path("/tmp/fruits-360-extracted")
+          extract_root = extract_dir.resolve()
+          extract_dir.mkdir()
+
+          with zipfile.ZipFile(archive_path) as archive:
+              for member in archive.infolist():
+                  destination = (extract_dir / member.filename).resolve()
+                  if not destination.is_relative_to(extract_root):
+                      raise ValueError(f"Unsafe path in dataset ZIP: {member.filename}")
+              archive.extractall(extract_dir)
+
+          candidates = [
+              path.parent
+              for path in extract_dir.rglob("Training")
+              if path.is_dir() and (path.parent / "Test").is_dir()
+          ]
+          if len(candidates) != 1:
+              raise ValueError("Dataset ZIP must contain exactly one matching Training/ and Test/ pair")
+
+          dataset_dir = Path("dataset")
+          dataset_dir.mkdir()
+          for split in ("Training", "Test"):
+              shutil.move(str(candidates[0] / split), dataset_dir / split)
+          shutil.rmtree(extract_dir)
+          archive_path.unlink()
+          PY
+
+      - name: Train and evaluate
+        run: |
+          python train.py --data_dir dataset --epochs 1 --batch_size 32 --freeze_backbone --num_workers 2 --output_dir outputs --model_dir models
+          python evaluate.py --data_dir dataset --num_workers 2 --output_dir outputs
+
+      - name: Upload model and results
+        uses: actions/upload-artifact@v4
+        with:
+          name: fruit-recognition-results
+          path: |
+            models/fruit_classifier.pth
+            outputs/
+          if-no-files-found: error
+          retention-days: 14

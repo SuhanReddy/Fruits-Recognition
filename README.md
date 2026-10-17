@@ -2,6 +2,23 @@
 
 A PyTorch-based fruit recognition project using **ResNet18 transfer learning** and **OpenCV** for real-time webcam recognition.
 
+## Run modes
+
+- `main` is the local Python workflow. Install the dependencies and run the commands below on your computer.
+- `github-actions` runs training and evaluation on GitHub Actions when changes are pushed to that branch. It does not change the local workflow on `main`.
+
+### Run on GitHub
+
+The dataset is not stored in this repository, so the GitHub runner needs a direct URL to a ZIP archive containing the `Training/` and `Test/` folders. Before pushing `github-actions`:
+
+1. In the GitHub repository, open **Settings → Secrets and variables → Actions → Variables**.
+2. Add a repository variable named `FRUITS_360_ZIP_URL` whose value is the direct download URL for the dataset ZIP.
+3. Push the `github-actions` branch. Each push that changes Python files, dependencies, or the workflow starts training and evaluation.
+
+When the run finishes, open the repository's **Actions** tab, select the run, and download the `fruit-recognition-results` artifact. It contains the model checkpoint and files from `outputs/`.
+
+The GitHub run uses a CPU runner and one frozen-backbone training epoch by default. The local commands below remain available on `main` for running with your own hardware and settings.
+
 ## ✨ Features
 
 - 🧠 ResNet18 transfer learning
