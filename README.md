@@ -15,9 +15,9 @@ The dataset is not stored in this repository, so the GitHub runner needs a direc
 2. Add a repository variable named `FRUITS_360_ZIP_URL` whose value is the direct download URL for the dataset ZIP.
 3. Push the `github-actions` branch. Each push that changes Python files, dependencies, or the workflow starts training and evaluation.
 
-When the run finishes, open the repository's **Actions** tab, select the run, and download the `fruit-recognition-results` artifact. It contains the model checkpoint and files from `outputs/`.
+When the run finishes, open the repository's **Actions** tab, select the run, and download the `fruit-recognition-results` artifact. It contains the model checkpoint and files from `outputs/`, and is retained for 14 days. Extract `models/fruit_classifier.pth` into your local project's `models/` folder to use the trained checkpoint.
 
-The GitHub run uses a CPU runner and one frozen-backbone training epoch by default. The local commands below remain available on `main` for running with your own hardware and settings.
+The GitHub run uses a CPU runner and one frozen-backbone training epoch by default. Test images whose class is missing from `Training/` are skipped with a warning because the model has no output class for them. GitHub Actions does not run webcam recognition; use the downloaded checkpoint and run `python webcam.py` locally. The local commands below remain available on `main` for running with your own hardware and settings.
 
 ## ✨ Features
 
