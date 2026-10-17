@@ -12,6 +12,7 @@ Expected folder layout (one sub-folder per fruit class):
             ...
 """
 from pathlib import Path
+import warnings
 
 import torch
 from torch.utils.data import DataLoader, Subset
@@ -51,17 +52,29 @@ def _get_dir(data_dir, name: str) -> Path:
 
 def _align_test_labels(test_set, class_names):
     train_class_to_idx = {name: index for index, name in enumerate(class_names)}
-    unknown_classes = set(test_set.classes) - train_class_to_idx.keys()
-    if unknown_classes:
-        raise ValueError(
-            f"Test/ contains classes not present in Training/: {sorted(unknown_classes)}"
-        )
-
     target_map = {
         test_index: train_class_to_idx[class_name]
         for test_index, class_name in enumerate(test_set.classes)
+        if class_name in train_class_to_idx
     }
     test_set.target_transform = target_map.__getitem__
+    valid_indices = [
+        index for index, target in enumerate(test_set.targets)
+        if target in target_map
+    ]
+    if not valid_indices:
+        raise ValueError("Test/ has no images for classes present in Training/.")
+
+    unknown_classes = set(test_set.classes) - train_class_to_idx.keys()
+    if unknown_classes:
+        skipped_count = len(test_set.targets) - len(valid_indices)
+        warnings.warn(
+            f"Skipping {skipped_count} Test/ image(s) from classes absent in Training/: "
+            f"{sorted(unknown_classes)}",
+            UserWarning,
+        )
+
+    return Subset(test_set, valid_indices)
 
 
 def build_dataloaders(data_dir, img_size=100, batch_size=64, val_split=0.1,
@@ -74,7 +87,7 @@ def build_dataloaders(data_dir, img_size=100, batch_size=64, val_split=0.1,
     train_full = datasets.ImageFolder(train_dir, transform=get_transforms(img_size, True))
     val_full = datasets.ImageFolder(train_dir, transform=get_transforms(img_size, False))
     test_set = datasets.ImageFolder(test_dir, transform=get_transforms(img_size, False))
-    _align_test_labels(test_set, train_full.classes)
+    test_set = _align_test_labels(test_set, train_full.classes)
 
     generator = torch.Generator().manual_seed(seed)
     perm = torch.randperm(len(train_full), generator=generator).tolist()
@@ -99,8 +112,9 @@ def build_test_loader(data_dir, img_size=100, batch_size=64, num_workers=2,
     """Return only the test loader and class names (used by evaluate.py)."""
     test_dir = _get_dir(data_dir, "Test")
     test_set = datasets.ImageFolder(test_dir, transform=get_transforms(img_size, False))
+    test_classes = test_set.classes
     if class_names is not None:
-        _align_test_labels(test_set, class_names)
+        test_set = _align_test_labels(test_set, class_names)
     loader = DataLoader(test_set, batch_size=batch_size, shuffle=False,
                         num_workers=num_workers, pin_memory=torch.cuda.is_available())
-    return loader, test_set.classes
+    return loader, test_classes
