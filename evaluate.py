@@ -31,9 +31,8 @@ def main():
     device = get_device()
     model, class_names, img_size = load_checkpoint(args.checkpoint, device)
     loader, test_classes = build_test_loader(args.data_dir, img_size,
-                                             args.batch_size, args.num_workers)
-    if test_classes != class_names:
-        raise ValueError("Class folders in Test/ do not match the classes the model was trained on.")
+                                             args.batch_size, args.num_workers,
+                                             class_names=class_names)
 
     all_preds, all_labels = [], []
     with torch.no_grad():

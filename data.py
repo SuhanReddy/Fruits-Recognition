@@ -49,6 +49,21 @@ def _get_dir(data_dir, name: str) -> Path:
     return path
 
 
+def _align_test_labels(test_set, class_names):
+    train_class_to_idx = {name: index for index, name in enumerate(class_names)}
+    unknown_classes = set(test_set.classes) - train_class_to_idx.keys()
+    if unknown_classes:
+        raise ValueError(
+            f"Test/ contains classes not present in Training/: {sorted(unknown_classes)}"
+        )
+
+    target_map = {
+        test_index: train_class_to_idx[class_name]
+        for test_index, class_name in enumerate(test_set.classes)
+    }
+    test_set.target_transform = target_map.__getitem__
+
+
 def build_dataloaders(data_dir, img_size=100, batch_size=64, val_split=0.1,
                       num_workers=2, seed=42):
     """Return train/val/test loaders and the list of class names."""
@@ -59,6 +74,7 @@ def build_dataloaders(data_dir, img_size=100, batch_size=64, val_split=0.1,
     train_full = datasets.ImageFolder(train_dir, transform=get_transforms(img_size, True))
     val_full = datasets.ImageFolder(train_dir, transform=get_transforms(img_size, False))
     test_set = datasets.ImageFolder(test_dir, transform=get_transforms(img_size, False))
+    _align_test_labels(test_set, train_full.classes)
 
     generator = torch.Generator().manual_seed(seed)
     perm = torch.randperm(len(train_full), generator=generator).tolist()
@@ -78,10 +94,13 @@ def build_dataloaders(data_dir, img_size=100, batch_size=64, val_split=0.1,
     return train_loader, val_loader, test_loader, train_full.classes
 
 
-def build_test_loader(data_dir, img_size=100, batch_size=64, num_workers=2):
+def build_test_loader(data_dir, img_size=100, batch_size=64, num_workers=2,
+                      class_names=None):
     """Return only the test loader and class names (used by evaluate.py)."""
     test_dir = _get_dir(data_dir, "Test")
     test_set = datasets.ImageFolder(test_dir, transform=get_transforms(img_size, False))
+    if class_names is not None:
+        _align_test_labels(test_set, class_names)
     loader = DataLoader(test_set, batch_size=batch_size, shuffle=False,
                         num_workers=num_workers, pin_memory=torch.cuda.is_available())
     return loader, test_set.classes
